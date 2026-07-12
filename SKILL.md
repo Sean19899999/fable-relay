@@ -36,6 +36,21 @@ in the repo README.
   served one. Only per-message `message.model` in the transcript is ground truth. Trust the
   user, not your config.
 
+## Is it even worth relaying? (first question after triggering — the economy gate)
+
+A relay carries a fixed overhead of roughly 20-50K tokens: the subagent is a brand-new
+context, so the original conversation's prompt cache scores **zero hits** for it (caching
+matches by exact prefix — a structural cost that cannot be optimized away). Therefore:
+
+- **Small fixes / one-liner tasks / pure Q&A → don't relay.** The main session (even as the
+  fallback model) does them directly — it holds the cache and is the cheap path. Tell the
+  user honestly that "this one isn't worth a relay, doing it myself is cheaper"; if the user
+  insists, dispatch anyway.
+- **Substantive multi-step work whose quality depends on the model tier → relay, and
+  batch.** Pack the day's accumulated to-dos into ONE brief for ONE agent (working example:
+  five review items relayed as a single package and finished by a single agent) — never one
+  agent per item, since every extra spawn pays the base overhead again.
+
 ## Procedure (main session follows this even if it is itself the fallback model)
 
 ### Step 0 — You are a dispatcher, not a detective
@@ -69,6 +84,18 @@ Review the conversation and write a one-shot brief for the relay subagent. The b
 - Include full context: absolute file paths, done/not-done boundaries, hard constraints
   (do-not-touch), expected deliverable format.
 - Be self-contained: the subagent is a fresh context and knows nothing from this chat.
+- **Carry pointers, not payloads (token-saving rule #1):** the brief holds exactly three
+  kinds of material — verbatim user quotes, file/log **paths**, and error text already
+  visible in the chat. MUST NOT paste file bodies or long documents into it; the subagent
+  reads from the paths itself, and only what it actually needs. Healthy size:
+  **≤ 2,500 characters** (real numbers: one fat brief that quoted documents in full burned
+  517,883 uncached input tokens in a single run, while same-day pointer-style briefs of
+  1.8-2.4K characters carried full-size tasks just fine).
+- **Write the brief to a file and reuse it:** save it as
+  `~/.claude/tmp/relay-brief-<YYYYMMDD>-<topic>.md`; the spawn prompt is then just the
+  guard marker + one or two lines of task framing + the brief's file path. If the run
+  downgrades or needs a respawn, point the fresh agent at the same file — don't rewrite
+  the brief.
 
 ### Step 2 — Dispatch rules (the core)
 
@@ -94,6 +121,10 @@ Agent({
   effort. Both unnamed channels tested 100% clean.
 - Require in the brief that the subagent **writes its deliverables to disk** (survives any
   relay loss), plus a final report message.
+- **No round-trips (token-saving rule #2):** dispatch it and let it run to completion — do
+  not exchange messages with the relay agent mid-run; every round-trip burns a turn on both
+  sides. A small gap in the finished result → the main session patches it itself; a big gap
+  → edit the brief file and respawn fresh, never follow up with the old agent.
 
 ### Step 3 — Verify the served model before claiming success
 
@@ -125,3 +156,8 @@ swap models or pass off fallback output as premium work.
   delisting, pinning it falls back 100% — say so honestly instead of pretending.
 - n=11 empirical pattern, single account, specific dates — not an official guarantee. If a
   bare spawn does downgrade, report it truthfully and record the counter-example.
+- **This is a quality tool, not a money-saver.** Losing the prompt cache is inherent to the
+  relay pattern; the economy gate, pointer-style briefs, and batching only compress the
+  waste back down to the 20-50K base overhead — never to zero. If quota is tight and the
+  task doesn't actually need the premium tier, not relaying (letting the main session do
+  it) is the optimal move.

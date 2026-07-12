@@ -79,6 +79,13 @@ premium model isn't available on your plan at all; the skill is designed to tell
 honestly rather than pretend. It doesn't bypass quotas, and it doesn't bypass safety —
 it only changes how the work gets handed off.
 
+One more thing worth saying plainly: this is a quality tool, not a money-saver. A relayed
+subagent starts from a blank context, so your session's prompt cache does nothing for it —
+every relay pays a real chunk of tokens before any work happens. Keep the handoff brief
+lean (quotes and file paths, not pasted documents), batch the day's items into one dispatch
+instead of one agent per item — and if a task doesn't actually need the premium model, the
+cheapest good answer is to just let the main session do it.
+
 ## License
 
 MIT

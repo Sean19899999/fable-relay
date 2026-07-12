@@ -36,22 +36,11 @@ in the repo README.
   served one. Only per-message `message.model` in the transcript is ground truth. Trust the
   user, not your config.
 
-## Is it even worth relaying? (first question after triggering — the economy gate)
-
-A relay carries a fixed overhead of roughly 20-50K tokens: the subagent is a brand-new
-context, so the original conversation's prompt cache scores **zero hits** for it (caching
-matches by exact prefix — a structural cost that cannot be optimized away). Therefore:
-
-- **Small fixes / one-liner tasks / pure Q&A → don't relay.** The main session (even as the
-  fallback model) does them directly — it holds the cache and is the cheap path. Tell the
-  user honestly that "this one isn't worth a relay, doing it myself is cheaper"; if the user
-  insists, dispatch anyway.
-- **Substantive multi-step work whose quality depends on the model tier → relay, and
-  batch.** Pack the day's accumulated to-dos into ONE brief for ONE agent (working example:
-  five review items relayed as a single package and finished by a single agent) — never one
-  agent per item, since every extra spawn pays the base overhead again.
-
 ## Procedure (main session follows this even if it is itself the fallback model)
+
+> Whether to relay at all is the **user's call** — invoking this skill IS the decision, so
+> don't second-guess it or lecture about overhead. (Advice for humans on when a relay is
+> worth its ~20-50K fresh-context overhead lives in the README fine print, not here.)
 
 ### Step 0 — You are a dispatcher, not a detective
 
@@ -112,7 +101,10 @@ Agent({
 
 - **MUST NOT pass a `name` parameter.** Naming creates a teammate (in-process team
   infrastructure); empirically 4/5 named spawns downgraded mid-run, 6/6 unnamed spawns
-  stayed clean. One task = one bare agent; collect and dismiss.
+  stayed clean. One dispatch = one bare agent; collect and dismiss.
+- **Batch the day's items:** pack accumulated to-dos into ONE brief for ONE agent (working
+  example: five review items relayed as a single package, finished by a single agent) —
+  never one agent per item; every extra spawn re-pays the ~20-50K fresh-context overhead.
 - MUST NOT use SendMessage team-coordination patterns for the relay.
 - If you run a model-guard PreToolUse hook (as the author does), put its approval marker
   (e.g. `USER-APPROVED-FABLE`) at the head of the prompt. Harmless noise otherwise.

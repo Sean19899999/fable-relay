@@ -9,6 +9,8 @@ description: >
   and verify the actually-served model from the transcript before claiming success.
   Triggers: "fable relay", "anti-downgrade dispatch", "relay to fable", "must be done by
   fable", 防降级派车, 降级接力, 派fable子代理接着干, 让fable接力.
+  Hard rule: once triggered, the main session is a PURE DISPATCHER — no pre-diagnosis, no
+  "quick look at the logs first"; diagnosis is part of what gets relayed.
 ---
 
 # fable-relay — Anti-downgrade subagent dispatch
@@ -35,6 +37,27 @@ in the repo README.
   user, not your config.
 
 ## Procedure (main session follows this even if it is itself the fallback model)
+
+### Step 0 — You are a dispatcher, not a detective
+
+Once this skill triggers, the main session's job shrinks to four things: **summarize,
+quote, dispatch, verify**.
+
+- **MUST NOT do any substantive diagnosis / analysis / debugging / fixing before
+  dispatching** — including the very reasonable-sounding "let me just take a quick look at
+  the logs first to save the subagent some tokens" (real incident, 2026-07-12: a session
+  triggered this skill and still started its own bug diagnosis; the user had to stop it).
+  Two reasons: the downgraded model's pre-diagnosis is exactly the quality you're trying to
+  avoid, and a wrong first guess anchors the premium model's judgment. Token-saving is not
+  a reason — the user manages quota.
+- The brief carries **raw materials only**: the user's verbatim words, error text already
+  visible in the chat, file/log paths, repro steps — never the main session's own analysis
+  or conclusions. **Diagnosis is itself part of the relayed task** — put it on the
+  subagent's task list ("first read the logs at X to find why the model connection fails,
+  then fix it").
+- Boundary: facts *already established* in the conversation before the trigger (what's
+  done, which files were touched, what the user decided) belong in a faithful summary —
+  include them. Any *new* investigation after the trigger is out of bounds — stop.
 
 ### Step 1 — Self-summarize the task (fidelity rule)
 

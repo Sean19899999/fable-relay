@@ -50,6 +50,11 @@ Once installed, when you notice your session has been downgraded, you just say
    written after the swap — instead of quietly handing you fallback work with a premium
    label on it.
 
+And one thing it deliberately *won't* do: let the downgraded main session "just take a
+quick look at the logs first". Diagnosis is part of the work being relayed — the whole
+point is that the good model does the thinking, and a wrong first guess from the fallback
+model would only lead the good one astray.
+
 ## Install
 
 ```bash

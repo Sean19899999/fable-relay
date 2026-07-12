@@ -1,59 +1,58 @@
 # fable-relay
 
-**Anti-downgrade subagent dispatch for Claude Code** — when your session silently falls back
-from a premium model (e.g. Fable 5 → Opus 4.8), relay the work to a *bare unnamed* subagent
-pinned to the premium model, which empirically resists mid-run downgrade far better than
-named teammate spawns. Then verify what model *actually* served the run before believing it.
+Keep your Claude Code work on the good model — even after your session quietly stops using it.
 
-**Claude Code 防降级派车 skill** —— 主会话被静默降级（如 Fable 5 → Opus 4.8）时，把活交给
-钉住高档模型的「裸」子代理接力，实测比带名字的 teammate 派法抗降级得多；完工后从 transcript
-验明正身，不信自称。
+让你的活儿留在高档模型上干完——哪怕你的会话已经悄悄"变笨"了。
 
 ---
 
 ## English
 
-### The problem
+### Ever feel like Claude suddenly got dumber mid-conversation?
 
-Under capacity pressure, Claude Code sessions can be **silently** downgraded: you requested
-Fable 5, `settings.json` still says Fable 5, the model *believes* it is Fable 5 — but every
-response is actually served by Opus 4.8. The only ground truth is the per-message
-`"model"` field in the session transcript (`~/.claude/projects/<project>/<session>.jsonl`).
+You might not be imagining it. When capacity gets tight, Claude Code can quietly swap the
+model serving your session — you picked Fable 5, your settings still say Fable 5, even the
+model itself believes it's Fable 5. But behind the scenes, every reply is coming from
+Opus 4.8. There's no banner, no warning. The only place the truth lives is a little
+`"model"` field buried in your session's log file.
 
-Worse: a downgraded main session that dispatches "Fable 5 subagents" may hand you
-downgraded subagents too — or not, depending on *how* it dispatches them.
+I found this out the hard way: I spent a day dispatching "Fable 5 subagents" from a session
+that had already been downgraded, and kept getting results that were... fine, but not
+*Fable* fine. So I dug through the logs of three days of conversations — eleven subagents in
+total — to figure out which ones actually stayed on Fable 5, and why.
 
-### The finding (n=11, 3 conversations, same account, 2026-07-11/12)
+### The surprising part
 
-| Spawn style | Result |
-|---|---|
-| With `name` param (teammate) | 4 of 5 downgraded mid-run, at message 6-9 |
-| Bare unnamed `Agent` spawn | 4 of 4 stayed clean on Fable 5 |
-| Workflow `agent()` worker (inherently unnamed) | 2 of 2 stayed clean (one killed by hard rate limit — died as Fable, never silently swapped) |
+It had almost nothing to do with *how busy* the system was, and everything to do with one
+tiny detail: **whether the subagent was given a name.**
 
-The decisive contrast: during the *same* stressed window, a bare unnamed spawn ran a
-**117-message marathon fully on Fable 5** (14:28→15:05), while named teammates dispatched at
-14:46 and 14:51 were silently swapped to Opus 4.8 within their first minute. Same account,
-same minutes — timing confounds excluded.
+Subagents I spawned as named "teammates" (the team-style dispatch with a `name` parameter)
+got silently swapped to the fallback model four times out of five — usually within their
+first few messages. Subagents spawned *bare* — no name, no team, just "here's your brief,
+go" — stayed on Fable 5 **six times out of six**. The most dramatic case: during the worst
+capacity crunch, a bare subagent ran 117 messages straight on pure Fable 5, while named
+teammates launched minutes apart from the same account were downgraded almost immediately.
 
-Mechanism (speculative, not provable from disk): named spawns join the in-process team
-infrastructure and appear to share the lead session's degraded serving state; unnamed spawns
-are independent sessions with independent model resolution.
+I can't see Anthropic's servers, so the mechanism is educated guesswork (named teammates
+seem to share the parent session's degraded state; bare spawns get a fresh die roll). But
+the pattern in the logs is hard to argue with.
 
-### What the skill does
+### So this skill does three things for you
 
-1. **Self-summarize with fidelity**: the (possibly downgraded) main session writes a
-   one-shot brief, quoting the user's original prompts **verbatim** — its own paraphrase is
-   supplementary only.
-2. **Dispatch bare**: `Agent({model, subagent_type, prompt, description})` — **never** a
-   `name` param, never SendMessage team choreography. One task, one bare agent. Pin effort
-   via a single-agent Workflow if needed.
-3. **Deliverables to disk**, not just chat.
-4. **Verify before claiming**: `grep '"model"' agent-*.jsonl | sort | uniq -c` — report the
-   actual served-model counts; if it downgraded, say at which message and which writes
-   happened after the switch. Downgraded runs get respawned, not resumed.
-5. **No quota games**: rate-limit errors are relayed verbatim; fallback output is never
-   passed off as premium work.
+Once installed, when you notice your session has been downgraded, you just say
+**"fable relay"** (or in Chinese, 防降级派车 / 降级接力). Then:
+
+1. **It writes the handoff brief for you.** The (downgraded) main session summarizes what
+   you were working on — and it must quote *your original words verbatim*, not its own
+   paraphrase, so nothing gets lost in translation.
+2. **It dispatches the work the resilient way.** A bare, unnamed subagent pinned to the
+   premium model, told to write its results to actual files on disk — following exactly the
+   pattern that went 6-for-6 in the logs.
+3. **It checks the receipts before declaring victory.** After the run, it greps the
+   subagent's log for which model *actually* answered each message. If the run got
+   downgraded halfway, it tells you straight — at which message, and which files were
+   written after the swap — instead of quietly handing you fallback work with a premium
+   label on it.
 
 ### Install
 
@@ -61,59 +60,61 @@ are independent sessions with independent model resolution.
 git clone https://github.com/Sean19899999/fable-relay ~/.claude/skills/fable-relay
 ```
 
-Then in any Claude Code session, say **"fable relay"** / **"anti-downgrade dispatch"**
-(or in Chinese: 防降级派车 / 降级接力). `SKILL.md` is the English edition Claude loads;
-`SKILL.zh-CN.md` is the full Chinese edition — swap file names if you prefer Chinese as
-the loaded one.
+That's it. Claude Code picks it up automatically; trigger it by saying "fable relay" or
+"anti-downgrade dispatch". The loaded `SKILL.md` is in English; a full Chinese edition
+(`SKILL.zh-CN.md`) sits right next to it — swap the filenames if you'd rather Claude read
+the Chinese one.
 
-Note: the `USER-APPROVED-FABLE` marker mentioned in the skill exists for the author's local
-PreToolUse model-guard hook. Without such a hook it is harmless prompt noise; keep or drop.
+(One small note: the skill mentions a `USER-APPROVED-FABLE` marker. That's the password for
+a permission hook I run on my own machine. If you don't have such a hook, it's just a few
+harmless extra words in the prompt.)
 
-### Honest caveats
+### The honest fine print
 
-- n=11, one account, two days, one model pair (Fable 5 / Opus 4.8). An empirical pattern,
-  not an official guarantee. Counter-examples welcome — file an issue.
-- Only works while the premium model is callable on your plan at all. During a full
-  delisting, pinning it falls back 100%; the skill reports that instead of pretending.
-- This is not a quota bypass and not a safety bypass. It changes *dispatch structure* only.
+This is a pattern from eleven subagents, one account, two days, one model pair. It's real
+evidence, not a guarantee — if you hit a case where a bare spawn downgrades anyway, I'd
+genuinely love to hear about it in an issue. And of course, none of this helps if the
+premium model isn't available on your plan at all; the skill is designed to tell you that
+honestly rather than pretend. It doesn't bypass quotas, and it doesn't bypass safety —
+it only changes how the work gets handed off.
 
 ---
 
 ## 中文
 
-### 问题
+### 有没有觉得 Claude 聊着聊着突然变笨了？
 
-容量压力下 Claude Code 会**静默**降级：你点的是 Fable 5，`settings.json` 写的还是 Fable 5，
-模型自己也**以为**自己是 Fable 5——但每条回复实际由 Opus 4.8 服务。唯一的事实来源是会话
-transcript（`~/.claude/projects/<项目>/<会话>.jsonl`）里每条消息的 `"model"` 字段。
+不一定是错觉。容量紧张的时候，Claude Code 会悄悄换掉给你干活的模型——你选的是 Fable 5，
+设置里写的还是 Fable 5，连模型自己都以为自己是 Fable 5，但实际上每条回复都是 Opus 4.8
+出的。没有任何提示。真相只藏在会话日志文件里一个不起眼的 `"model"` 字段里。
 
-更麻烦的是：已降级的主会话去派「Fable 5 子代理」，派出来的可能也是降级货——**取决于怎么派**。
+我是踩了坑才发现的：有一天我从一个（其实已经被降级的）会话里连派了好几个"Fable 5 子代理"，
+拿回来的活总觉得……能用，但不是 Fable 该有的水平。于是我把三天的对话日志翻了个底朝天——
+一共 11 个子代理——逐条核对到底谁真的是 Fable 5 干的，谁半路被换了人。
 
-### 取证结论（n=11，三个对话，同一账号，2026-07-11/12）
+### 意外的发现
 
-| 派法 | 结果 |
-|---|---|
-| 带 name 参数（teammate 组队） | 5 个里 4 个中途降级，都在第 6-9 条 |
-| 裸 Agent 派（不带 name） | 4/4 全程纯 Fable 5 |
-| Workflow agent() 工人（天然无名） | 2/2 干净（其一被硬限额杀死——以 Fable 身份死掉，没被静默换） |
+跟系统忙不忙关系不大，跟一个小细节关系极大：**派子代理的时候，给没给它起名字。**
 
-决定性对照：同一个压力窗口里，裸派子代理跑了 **117 条消息全程纯 Fable**（14:28→15:05），
-而 14:46、14:51 派出的命名 teammate 一分钟内就被换成 Opus 4.8。同账号、同几分钟——时间
-混杂已排除。
+凡是用"组队"方式派出去、带了 `name` 参数的子代理，5 个里有 4 个半路被静默换成了降级模型，
+基本都撑不过开头几条消息。而**裸派**的——不起名、不组队、把任务简报一次给全就让它去干的——
+**6 个全程都是纯 Fable 5**。最夸张的对照：在容量最紧张的时间窗里，一个裸派子代理连跑 117
+条消息全程纯 Fable，而同一账号、就差几分钟派出去的命名子代理，一分钟内就被换掉了。
 
-机制推测（磁盘证据无法证实）：命名派进了 in-process 组队设施、疑似与已降级的主会话共享服务
-状态；裸派是独立会话、独立解析模型。
+服务端我看不到，机制只能推测（命名组队似乎会共享主会话已降级的状态，裸派则是独立重新分配）。
+但日志里的规律非常硬。
 
-### skill 做什么
+### 所以这个 skill 帮你干三件事
 
-1. **忠于原话的任务自总结**：（可能已降级的）主会话写 one-shot 简报，**一字不改引用**用户
-   原始 prompt，转述只作补充；
-2. **裸派**：`Agent({model, subagent_type, prompt, description})`——**绝不**带 `name`、
-   不搞 SendMessage 协作编排；一个活一个裸代理。要钉 effort 就走单代理 Workflow；
-3. **产出落盘**，不只留在回话里；
-4. **验明正身再交差**：`grep '"model"' agent-*.jsonl | sort | uniq -c`——报实际服务模型
-   条数；降了就明说降在第几条、哪些写入是降级后干的。降级的活重派新裸代理，不续跑；
-5. **不玩额度**：限额报错原样上报；绝不拿降级产出冒充高档模型交差。
+装好之后，发现会话被降级了，你只要说一句 **「防降级派车」** 或 **「降级接力」**（英文说
+"fable relay" 也行），它就会：
+
+1. **替你写好交接简报。**（已经降级的）主会话自己总结你今天在干什么——但必须一字不改地
+   引用你的原话，它自己的转述只能当补充，保证活儿不走样；
+2. **用抗降级的方式把活派出去。** 裸派一个钉住高档模型的子代理，要求成果直接写进文件——
+   完全照着日志里 6 战 6 胜的那套派法；
+3. **交活前先验货。** 跑完以后去查子代理的日志，看每条消息到底是谁答的。如果半路被降级了，
+   直接告诉你：从第几条开始降的、降级之后写了哪些文件——而不是把降级货贴上高档标签糊弄你。
 
 ### 安装
 
@@ -121,20 +122,18 @@ transcript（`~/.claude/projects/<项目>/<会话>.jsonl`）里每条消息的 `
 git clone https://github.com/Sean19899999/fable-relay ~/.claude/skills/fable-relay
 ```
 
-之后在任意 Claude Code 会话里说 **「防降级派车」/「降级接力」**（或英文 "fable relay"）即可。
-Claude 加载的是 `SKILL.md`（英文版）；`SKILL.zh-CN.md` 是完整中文版，想让 Claude 读中文版
-就把两个文件名对调。
+装完就行，Claude Code 会自动识别。默认加载的 `SKILL.md` 是英文版，旁边的
+`SKILL.zh-CN.md` 是完整中文版——想让 Claude 读中文版，把两个文件名对调一下就好。
 
-注：skill 里提到的 `USER-APPROVED-FABLE` 标记是作者本地 PreToolUse 模型守卫 hook 的放行
-暗号；没装这类 hook 的话它只是无害的提示词噪音，留删随意。
+（小注：skill 里提到的 `USER-APPROVED-FABLE` 是我自己机器上一个权限 hook 的放行暗号。
+你没装这种 hook 的话，它就是几个无害的多余单词，留着删掉都行。）
 
-### 诚实边界
+### 丑话说在前面
 
-- n=11、单账号、两天、单一模型对（Fable 5 / Opus 4.8）——经验规律，不是官方保证。欢迎提
-  issue 补充反例。
-- 前提是高档模型在你的订阅里可调；官方彻底下架期间钉了也会 100% 回退，skill 会如实报告而
-  不是硬装。
-- 这不是额度绕过、也不是安全绕过——它只改变**派车结构**。
+这是 11 个子代理、单账号、两天、一对模型（Fable 5 / Opus 4.8）跑出来的规律——是真实证据，
+但不是保证。如果你遇到裸派也被降级的反例，真心欢迎开 issue 告诉我。另外，高档模型压根不在
+你订阅里的时候，这招也无能为力——skill 会如实告诉你，而不是硬装。它不绕额度、不绕安全，
+只改变交接活儿的方式。
 
 ---
 

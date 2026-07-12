@@ -149,7 +149,7 @@ swap models or pass off fallback output as premium work.
 - n=11 empirical pattern, single account, specific dates — not an official guarantee. If a
   bare spawn does downgrade, report it truthfully and record the counter-example.
 - **This is a quality tool, not a money-saver.** Losing the prompt cache is inherent to the
-  relay pattern; the economy gate, pointer-style briefs, and batching only compress the
-  waste back down to the 20-50K base overhead — never to zero. If quota is tight and the
-  task doesn't actually need the premium tier, not relaying (letting the main session do
-  it) is the optimal move.
+  relay pattern; pointer-style briefs, batching, and no-round-trips only compress the waste
+  back down to the 20-50K base overhead — never to zero. When a relay is worth it is the
+  user's judgment call (the README fine print offers advice for humans); the skill itself
+  never blocks an invocation.
